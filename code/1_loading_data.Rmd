@@ -1,0 +1,102 @@
+---
+title: "Analysis for Predocs - loading the data"
+author: "Sarah Kaspar"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(GEOquery)
+library(SummarizedExperiment)
+library(tidyverse)
+library(DESeq2)
+```
+
+# Data mining
+
+We read the count data from the file:
+```{r}
+countData = read.csv("../data/GSE155237_gene_counts.csv",row.names=1)
+countData[1:5,1:5]
+dim(countData)
+```
+
+We access the column data using the `GEOquery` package:
+```{r}
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+gse = getGEO("GSE155237",GSEMatrix=TRUE)[[1]]
+pdata = pData(phenoData(gse))
+dim(pdata)
+```
+
+We change some of the column names to be R-friendly:
+```{r construct SummarizedExperiment}
+# useful names for the relevant columns in pdata
+CN = colnames(pdata)
+CN
+CN[44:48] = c("batch", "donor", "outcome","symptom","timepoint")
+colnames(pdata) = CN
+```
+
+Now, we use a DESeq object to store the data.
+```{r}
+SE <- DESeqDataSetFromMatrix(countData =  countData, colData = pdata, design = ~ 1)
+```
+
+We can also annotate the gene information at this stage.
+```{r}
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
+geneAnno <- getBM(attributes=c('ensembl_gene_id','hgnc_symbol','chromosome_name', 'gene_biotype', 'entrezgene_id'), mart = ensembl)
+rowAnno <- geneAnno[match(rownames(SE), geneAnno$ensembl_gene_id),2:5]
+rownames(rowAnno) <- rownames(SE)
+colnames(rowAnno) <- c("symbol","chromosome","biotype","entrezgene_id")
+rowData(SE) <- rowAnno
+
+#calculate size factors
+SE <- estimateSizeFactors(SE)
+```
+
+
+# Explore the data
+We can now find out what the relevant columns in the column data are:
+
+```{r explore data}
+colData(SE) %>% names()
+```
+The samples belong to 40 patients (paper: 58):
+```{r}
+pdata$donor %>% head()
+pdata$donor %>% unique() %>%length()
+```
+
+They were collected on two different days:
+```{r days}
+pdata$timepoint %>% unique()
+```
+
+
+Cross-tabulate outcome and symptoms:
+```{r}
+table(colData(SE)$symptom,colData(SE)$outcome)
+```
+
+As described in the paper, we exclude the samples from the "indeterminate" group, i.e. patients that are infected, but show no symptoms. This reduces the data set to 64 samples from 33 patients.
+
+```{r exclude indeterminate samples}
+SEsubset = subset(SE,select=!(colData(SE)$symptom=="no_cold" & colData(SE)$outcome=="Infected"))
+dim(SEsubset)
+colData(SEsubset)$donor %>% unique() %>%length()
+```
+
+
+Make a table of the relevant experimental conditions:
+
+```{r table of GO, results='asis'}
+pdataS = colData(SEsubset)
+knitr::kable(dplyr::arrange(data.frame(pdataS[,44:48]),donor))
+```
