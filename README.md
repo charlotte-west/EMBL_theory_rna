@@ -18,6 +18,6 @@ There are also two helpful papers on cross-validation in the materials folder of
 + Ambroise et al. (2002)
 + Ruschhaupt et al. (2004) (please read only Fig. 1 and p. 3)
 
-[Here](https://docs.google.com/presentation/d/1eAzksVhkN59JC9DPuSKRqkFkaF0PzUkHq6EamzVTct8/edit#slide=id.p1) is the link to Wolfgang's presentation.
+
 
 
